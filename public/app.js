@@ -1,231 +1,203 @@
-const menuButton = document.querySelector('.menu-toggle');
-const mobileMenu = document.getElementById('mobile-menu');
-function closeMenu(){menuButton.setAttribute('aria-expanded','false');menuButton.setAttribute('aria-label','Open navigation');mobileMenu.hidden=true;}
-menuButton.addEventListener('click',()=>{const open=menuButton.getAttribute('aria-expanded')==='true';menuButton.setAttribute('aria-expanded',String(!open));menuButton.setAttribute('aria-label',open?'Open navigation':'Close navigation');mobileMenu.hidden=open;});
-mobileMenu.querySelectorAll('a').forEach(a=>a.addEventListener('click',closeMenu));
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!mobileMenu.hidden){closeMenu();menuButton.focus();}});
-window.matchMedia('(min-width:761px)').addEventListener('change',e=>{if(e.matches)closeMenu();});
-const serviceContent={
- media:{kicker:'REACH WITH PURPOSE',title:'Put your message where it matters.',copy:'Bring audience, creative and channel planning together around one clear business objective. Build a campaign with a reason behind every click.',tags:['Campaign planning','Creative direction','Ongoing optimization']},
- leads:{kicker:'TURN INTEREST INTO OPPORTUNITY',title:'Find people ready for a conversation.',copy:'Start with your ideal customer and the type of inquiry your team can use. Explore lead acquisition, campaign targeting and a handoff that fits your sales process.',tags:['Audience definition','Lead acquisition','Sales handoff']},
- partnerships:{kicker:'TRAFFIC MEETS OPPORTUNITY',title:'Find the right partnership.',copy:'Start with the advertiser’s goals and the publisher’s audience. Discuss traffic sources, campaign requirements and how a potential partnership could work.',tags:['Traffic sources','Campaign alignment','Partnership scope']}
-};
-document.querySelectorAll('.service').forEach(button=>button.addEventListener('click',()=>{
- document.querySelectorAll('.service').forEach(b=>{b.classList.toggle('active',b===button);b.setAttribute('aria-pressed',String(b===button));});
- const data=serviceContent[button.dataset.service];
- document.getElementById('detail-kicker').textContent=data.kicker;
- document.getElementById('detail-title').textContent=data.title;
- document.getElementById('detail-copy').textContent=data.copy;
- document.getElementById('detail-tags').replaceChildren(...data.tags.map(text=>{const el=document.createElement('span');el.textContent=text;return el;}));
- if(window.matchMedia('(max-width:760px)').matches)document.getElementById('service-detail').scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion:reduce)').matches?'instant':'smooth',block:'center'});
-}));
-const form=document.getElementById('enquiry-form');
-const submitButton = document.getElementById('send-inquiry');
-const formStatus = document.getElementById('form-status');
-let sending = false;
-let requestId = null;
-let lastPayload = null;
-function showFormStatus(message, kind = '') {
- formStatus.textContent = message;
- formStatus.dataset.kind = kind;
-}
-async function loadContactConfig() {
- try {
-  const response = await fetch('/api/contact/config', { signal: AbortSignal.timeout(8000) });
-  const config = response.ok ? await response.json() : null;
-  if (!config?.enabled) throw new Error();
-  submitButton.disabled = false;
-  submitButton.firstChild.textContent = 'Send inquiry ';
- } catch {
-  submitButton.disabled = true;
-  submitButton.firstChild.textContent = 'Form unavailable ';
-  showFormStatus('The contact form is temporarily unavailable. Please try again later.', 'error');
- }
-}
-loadContactConfig();
-form.addEventListener('submit', async event => {
- event.preventDefault();
- if (sending || submitButton.disabled) return;
- const name = form.elements.namedItem('name');
- const goal = form.elements.namedItem('goal');
- name.setCustomValidity(name.value.trim() ? '' : 'Please enter your name.');
- goal.setCustomValidity(goal.value.trim() ? '' : 'Please tell us a little about your goal.');
- if (!form.reportValidity()) return;
- const data = Object.fromEntries(new FormData(form));
- for (const key of Object.keys(data)) data[key] = data[key].trim();
- const payload = JSON.stringify(data);
- if (payload !== lastPayload) { requestId = crypto.randomUUID(); lastPayload = payload; }
- data.request_id = requestId;
- const controls = [...form.querySelectorAll('input, textarea, button')];
- const disabledState = controls.map(control => control.disabled);
- sending = true;
- form.setAttribute('aria-busy', 'true');
- controls.forEach(control => { control.disabled = true; });
- submitButton.firstChild.textContent = 'Sending… ';
- showFormStatus('Submitting your inquiry…');
- try {
-  const response = await fetch('/api/contact', {
-   method: 'POST', headers: { 'Content-Type': 'application/json' },
-   body: JSON.stringify(data), signal: AbortSignal.timeout(20000)
+(() => {
+  'use strict';
+  const body = document.body;
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const finePointer = window.matchMedia('(pointer: fine)');
+  const motionButton = document.querySelector('.motion-control');
+  const header = document.querySelector('.site-header');
+  const menuButton = document.querySelector('.menu-toggle');
+  const mobileNav = document.querySelector('.mobile-nav');
+  const hero = document.querySelector('.hero');
+  const stage = document.querySelector('.hero-stage');
+  const progress = document.querySelector('.reading-progress');
+  const statement = document.querySelector('.statement-band');
+  const statementInner = document.querySelector('.statement-inner');
+  let manuallyPaused = false;
+  try { manuallyPaused = localStorage.getItem('mirel-direction-motion') === 'paused'; } catch {}
+  let heroVisible = true;
+  let animationFrame = 0;
+  let lastDraw = 0;
+  let canvasTime = 0;
+  let width = 0, height = 0;
+  const canvas = document.querySelector('#current-canvas');
+  const ctx = canvas.getContext('2d');
+  const motionAllowed = () => !manuallyPaused && !reducedMotion.matches && !document.hidden;
+
+  function updateMotion() {
+    const paused = manuallyPaused || reducedMotion.matches;
+    body.classList.toggle('paused', paused);
+    motionButton.setAttribute('aria-pressed', String(paused));
+    motionButton.setAttribute('aria-label', reducedMotion.matches ? 'Reduced motion is enabled in your device settings' : paused ? 'Resume decorative motion' : 'Pause decorative motion');
+    motionButton.querySelector('.motion-label').textContent = reducedMotion.matches ? 'Reduced motion' : paused ? 'Resume motion' : 'Pause motion';
+    motionButton.querySelector('.motion-icon').textContent = paused ? '▷' : 'Ⅱ';
+    stage.style.setProperty('--mx', '0px');
+    stage.style.setProperty('--my', '0px');
+    if (motionAllowed() && heroVisible) startCanvas();
+    else { cancelAnimationFrame(animationFrame); animationFrame = 0; }
+    updateScroll();
+  }
+
+  motionButton.addEventListener('click', () => {
+    if (reducedMotion.matches) return;
+    manuallyPaused = !manuallyPaused;
+    try { localStorage.setItem('mirel-direction-motion', manuallyPaused ? 'paused' : 'playing'); } catch {}
+    updateMotion();
   });
-  const result = await response.json().catch(() => null);
-  if (!response.ok || result?.ok !== true) throw new Error(result?.error || 'We could not submit your inquiry. Please try again.');
-  showFormStatus('Thanks — your inquiry has been submitted. We’ll be in touch.', 'success');
-  form.reset();
-  updateRolePrompt(form.elements.namedItem('partner_role').value);
-  requestId = null; lastPayload = null;
- } catch (error) {
-  const message = ['TimeoutError', 'AbortError', 'TypeError'].includes(error.name)
-   ? 'We could not confirm your submission. It may have been sent. Please wait before trying again; another submission could send a duplicate.'
-   : error.message;
-  showFormStatus(message, 'error');
- } finally {
-  sending = false;
-  form.removeAttribute('aria-busy');
-  controls.forEach((control, i) => { control.disabled = disabledState[i]; });
-  submitButton.firstChild.textContent = 'Send inquiry ';
-  formStatus.focus({ preventScroll: true });
- }
-});
-form.addEventListener('input', event => {
- if (event.target.setCustomValidity) event.target.setCustomValidity('');
-});
-
-// Two inquiry paths, with accessible tabs and no invented network or account access.
-const partnerTabs = [...document.querySelectorAll('.partner-tab')];
-function selectPartner(type) {
- if(!['advertiser','publisher'].includes(type)) return;
- partnerTabs.forEach(tab => {
-  const selected = tab.dataset.partner === type;
-  tab.classList.toggle('active', selected);
-  tab.setAttribute('aria-selected', String(selected));
-  tab.tabIndex = selected ? 0 : -1;
- });
- document.querySelectorAll('.partner-panel').forEach(panel => {panel.hidden = panel.id !== 'panel-' + type;});
-}
-partnerTabs.forEach((tab,index) => {
- tab.addEventListener('click', () => selectPartner(tab.dataset.partner));
- tab.addEventListener('keydown', event => {
-  let next;
-  if(event.key === 'ArrowRight') next = (index + 1) % partnerTabs.length;
-  else if(event.key === 'ArrowLeft') next = (index - 1 + partnerTabs.length) % partnerTabs.length;
-  else if(event.key === 'Home') next = 0;
-  else if(event.key === 'End') next = partnerTabs.length - 1;
-  else return;
-  event.preventDefault();
-  selectPartner(partnerTabs[next].dataset.partner);
-  partnerTabs[next].focus();
- });
-});
-document.querySelectorAll('[data-partner-link]').forEach(link => link.addEventListener('click', () => selectPartner(link.dataset.partnerLink)));
-const roleInputs = [...form.querySelectorAll('input[name="partner_role"]')];
-const goalLabel = document.getElementById('goal-label');
-const goalPrompts = {
- Advertiser:{label:'Tell us about your campaign',placeholder:'Your offer, target audience and the leads you’re looking for…'},
- Publisher:{label:'Tell us about your traffic',placeholder:'Your channels, audience, markets and the campaigns you’d like to explore…'},
- Other:{label:'Tell us about the opportunity',placeholder:'What would you like to explore with mirel-media?'}
-};
-function updateRolePrompt(role) {
- const prompt = goalPrompts[role] || goalPrompts.Other;
- goalLabel.textContent = prompt.label;
- form.elements.goal.placeholder = prompt.placeholder;
-}
-roleInputs.forEach(input => input.addEventListener('change', () => updateRolePrompt(input.value)));
-document.querySelectorAll('[data-partner-enquiry]').forEach(link => link.addEventListener('click', () => {
- const publisher = link.dataset.partnerEnquiry === 'publisher';
- const role = publisher ? 'Publisher' : 'Advertiser';
- roleInputs.forEach(input => {input.checked = input.value === role;});
- const interest = publisher ? 'Traffic partnerships' : 'Lead generation';
- form.querySelectorAll('input[name="interest"]').forEach(input => {input.checked = input.value === interest;});
- updateRolePrompt(role);
-}));
-
-// The journey changes only on request. No simulated live metrics or lead notifications.
-const journeyButtons = [...document.querySelectorAll('.journey-step')];
-const journeyCanvas = document.getElementById('journey-canvas');
-journeyButtons.forEach(button => button.addEventListener('click', () => {
- const stage = button.dataset.stage;
- journeyButtons.forEach(item => {
-  const active = item === button;
-  item.classList.toggle('active', active);
-  item.setAttribute('aria-pressed', String(active));
- });
- journeyCanvas.dataset.stage = stage;
- document.querySelectorAll('.journey-scene').forEach(scene => {scene.hidden = scene.id !== 'scene-' + stage;});
- document.querySelectorAll('.stage-dots i').forEach((dot, index) => dot.classList.toggle('active', index === Number(stage) - 1));
- if(window.matchMedia('(max-width:760px)').matches)journeyCanvas.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion:reduce)').matches?'instant':'smooth',block:'center'});
-}));
-
-const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-const finePointer = window.matchMedia('(hover: hover) and (pointer: fine)');
-const motionButton = document.querySelector('.motion-toggle');
-const heroVisual = document.getElementById('hero-visual');
-let manualPause = false;
-let revealObserver;
-try { manualPause = (localStorage.getItem('mirel-media-motion-paused') ?? localStorage.getItem('mirelads-motion-paused') ?? localStorage.getItem('lior-motion-paused')) === 'true'; } catch {}
-function motionPaused() { return manualPause || reducedMotion.matches; }
-function revealAll() {
- document.querySelectorAll('.reveal').forEach(el => {el.classList.remove('awaiting-reveal');el.classList.add('is-visible');});
- if(revealObserver) revealObserver.disconnect();
-}
-function syncMotion() {
- const paused = motionPaused();
- document.documentElement.classList.toggle('motion-paused', paused);
- motionButton.setAttribute('aria-pressed', String(paused));
- motionButton.setAttribute('aria-label', paused ? 'Resume decorative animations' : 'Pause decorative animations');
- motionButton.querySelector('.motion-label').textContent = paused ? 'Resume motion' : 'Pause motion';
- motionButton.querySelector('.motion-icon').textContent = paused ? '▷' : 'Ⅱ';
- if(paused) {heroVisual.style.setProperty('--mx', '0px');heroVisual.style.setProperty('--my', '0px');revealAll();}
-}
-motionButton.addEventListener('click', () => {
- manualPause = !manualPause;
- try { localStorage.setItem('mirel-media-motion-paused', String(manualPause)); } catch {}
- syncMotion();
-});
-reducedMotion.addEventListener('change', syncMotion);
-syncMotion();
-
-if('IntersectionObserver' in window && !motionPaused()) {
- revealObserver = new IntersectionObserver(entries => {
-  entries.forEach(entry => {
-   if(entry.isIntersecting) {entry.target.classList.add('is-visible');revealObserver.unobserve(entry.target);}
+  reducedMotion.addEventListener('change', updateMotion);
+  document.addEventListener('visibilitychange', () => {
+    body.classList.toggle('page-hidden', document.hidden);
+    updateMotion();
   });
- }, {threshold:0.12, rootMargin:'0px 0px -15px 0px'});
- document.querySelectorAll('.reveal').forEach(el => {el.classList.add('awaiting-reveal');revealObserver.observe(el);});
- // Keep keyboard navigation visible even before a scroll reveal fires.
- document.addEventListener('focusin', event => {
-  const parent = event.target.closest('.reveal');
-  if(parent) {parent.classList.add('is-visible');revealObserver.unobserve(parent);}
- });
-}
 
-let pointerFrame = 0;
-heroVisual.addEventListener('pointermove', event => {
- if(motionPaused() || !finePointer.matches || event.pointerType === 'touch') return;
- const bounds = heroVisual.getBoundingClientRect();
- const x = ((event.clientX - bounds.left) / bounds.width - 0.5) * 17;
- const y = ((event.clientY - bounds.top) / bounds.height - 0.5) * 13;
- cancelAnimationFrame(pointerFrame);
- pointerFrame = requestAnimationFrame(() => {
-  if(motionPaused()) return;
-  heroVisual.style.setProperty('--mx', x.toFixed(2) + 'px');
-  heroVisual.style.setProperty('--my', y.toFixed(2) + 'px');
- });
-});
-heroVisual.addEventListener('pointerleave', () => {
- cancelAnimationFrame(pointerFrame);
- heroVisual.style.setProperty('--mx', '0px');heroVisual.style.setProperty('--my', '0px');
-});
-let scrollPending = false;
-const header = document.querySelector('.header');
-const progress = document.querySelector('.scroll-progress');
-function updateScroll() {
- const distance = document.documentElement.scrollHeight - window.innerHeight;
- const amount = distance > 0 ? Math.min(1, Math.max(0, window.scrollY / distance)) : 0;
- progress.style.transform = 'scaleX(' + amount + ')';
- header.classList.toggle('scrolled', window.scrollY > 25);
- scrollPending = false;
-}
-window.addEventListener('scroll', () => {if(!scrollPending) {scrollPending = true;requestAnimationFrame(updateScroll);}}, {passive:true});
-window.addEventListener('resize', updateScroll, {passive:true});
-updateScroll();
+  function closeMenu(returnFocus = false) {
+    mobileNav.hidden = true;
+    menuButton.setAttribute('aria-expanded', 'false');
+    menuButton.setAttribute('aria-label', 'Open navigation');
+    if (returnFocus) menuButton.focus();
+  }
+  menuButton.addEventListener('click', () => {
+    const opening = mobileNav.hidden;
+    mobileNav.hidden = !opening;
+    menuButton.setAttribute('aria-expanded', String(opening));
+    menuButton.setAttribute('aria-label', opening ? 'Close navigation' : 'Open navigation');
+    if (opening) mobileNav.querySelector('a').focus();
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !mobileNav.hidden) closeMenu(true);
+  });
+  document.addEventListener('click', event => {
+    if (!header.contains(event.target) && !mobileNav.hidden) closeMenu();
+  });
+
+  const form = document.querySelector('#inquiry-form');
+  document.querySelectorAll('a[href^="#"]').forEach(link => {
+    link.addEventListener('click', () => {
+      closeMenu();
+      const role = link.dataset.role;
+      if (role) {
+        const field = [...form.querySelectorAll('input[name="partner_role"]')].find(input => input.value === role);
+        if (field) field.checked = true;
+      }
+      if (role || link.dataset.interest) {
+        form.elements.interest.value = link.dataset.interest || (role === 'Publisher' ? 'Traffic partnerships' : 'Lead generation');
+      }
+    });
+  });
+
+  const creative = document.querySelector('.media-creative');
+  const creativeCopy = ['MAKE<br>THEM<br><em>LOOK.</em>', 'GOOD.<br>BOLD.<br><em>SEEN.</em>', 'YOUR<br>NEXT<br><em>MOVE.</em>'];
+  document.querySelector('.creative-switch').addEventListener('click', () => {
+    const state = (Number(creative.dataset.creative) + 1) % 3;
+    creative.dataset.creative = String(state);
+    creative.querySelector('.ad-word').innerHTML = creativeCopy[state];
+    const switcher = creative.querySelector('.creative-switch');
+    switcher.setAttribute('aria-label', `Change the illustrative creative. Variation ${state + 1} of 3.`);
+  });
+
+  if ('IntersectionObserver' in window) {
+    const revealObserver = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('in-view');
+          revealObserver.unobserve(entry.target);
+        }
+      });
+    }, { threshold: .08, rootMargin: '0px 0px -35px 0px' });
+    document.querySelectorAll('.reveal').forEach(element => revealObserver.observe(element));
+    const activityObserver = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        entry.target.classList.toggle('offscreen', !entry.isIntersecting);
+        if (entry.target === hero) {
+          heroVisible = entry.isIntersecting;
+          updateMotion();
+        }
+      });
+    }, { rootMargin: '100px 0px' });
+    document.querySelectorAll('.hero,.marquee,.creative,.perspective,.contact').forEach(element => activityObserver.observe(element));
+    body.classList.add('js');
+  }
+  document.addEventListener('focusin', event => {
+    const parent = event.target.closest('.reveal');
+    if (parent) parent.classList.add('in-view');
+  });
+
+  let scrollQueued = false;
+  function updateScroll() {
+    const y = window.scrollY;
+    const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+    progress.style.transform = `scaleX(${Math.min(1, y / maxScroll)})`;
+    header.classList.toggle('scrolled', y > 100);
+    if (motionAllowed()) {
+      const rect = statement.getBoundingClientRect();
+      const amount = Math.max(0, Math.min(1, (window.innerHeight - rect.top) / (window.innerHeight + rect.height)));
+      const travel = Math.max(0, statementInner.scrollWidth - window.innerWidth + 20);
+      statementInner.style.setProperty('--band-x', `${-travel * amount}px`);
+    } else statementInner.style.setProperty('--band-x', '0px');
+    scrollQueued = false;
+  }
+  window.addEventListener('scroll', () => {
+    if (!scrollQueued) { scrollQueued = true; requestAnimationFrame(updateScroll); }
+  }, { passive: true });
+
+  hero.addEventListener('pointermove', event => {
+    if (!motionAllowed() || !finePointer.matches || innerWidth < 801) return;
+    const rect = hero.getBoundingClientRect();
+    stage.style.setProperty('--mx', `${((event.clientX - rect.left) / rect.width - .5) * 28}px`);
+    stage.style.setProperty('--my', `${((event.clientY - rect.top) / rect.height - .5) * 20}px`);
+  }, { passive: true });
+  hero.addEventListener('pointerleave', () => {
+    stage.style.setProperty('--mx', '0px'); stage.style.setProperty('--my', '0px');
+  });
+
+  function sizeCanvas() {
+    width = hero.clientWidth; height = hero.clientHeight;
+    const ratio = Math.min(window.devicePixelRatio || 1, 1.5);
+    canvas.width = Math.round(width * ratio); canvas.height = Math.round(height * ratio);
+    if (ctx) { ctx.setTransform(ratio, 0, 0, ratio, 0, 0); drawCurrent(canvasTime); }
+    if (innerWidth > 800) closeMenu();
+    updateScroll();
+  }
+  function drawCurrent(time) {
+    if (!ctx) return;
+    ctx.clearRect(0, 0, width, height);
+    const center = width * .78;
+    const radius = Math.max(170, width * .29);
+    for (let i = 0; i < 21; i++) {
+      const shift = i * 13;
+      const sway = Math.sin(time * .00022 + i * .085) * 32;
+      ctx.beginPath();
+      ctx.moveTo(center - radius + shift * .15, height * .1);
+      ctx.bezierCurveTo(center - radius - 120 + sway, height * .55, center + radius + 30 + sway, height * .18 + shift, center + radius - shift, height * .95);
+      ctx.strokeStyle = `rgba(75,91,181,${.035 + (i % 4) * .012})`;
+      ctx.lineWidth = i % 5 === 0 ? 1 : .6;
+      ctx.stroke();
+    }
+    for (let i = 0; i < 8; i++) {
+      const p = ((time * .000026 + i / 8) % 1);
+      const x = center + Math.sin(p * Math.PI * 2 + i) * radius * .8;
+      const y = p * height;
+      ctx.fillStyle = `rgba(119,85,180,${Math.sin(p * Math.PI) * .35})`;
+      ctx.beginPath(); ctx.arc(x, y, i % 2 ? 1.2 : 1.8, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  function animateCanvas(time) {
+    if (!motionAllowed() || !heroVisible) { animationFrame = 0; return; }
+    if (time - lastDraw > 32) {
+      canvasTime += Math.min(time - lastDraw, 50);
+      lastDraw = time; drawCurrent(canvasTime);
+    }
+    animationFrame = requestAnimationFrame(animateCanvas);
+  }
+  function startCanvas() {
+    if (!animationFrame && ctx) { lastDraw = performance.now(); animationFrame = requestAnimationFrame(animateCanvas); }
+  }
+  let resizeQueued = false;
+  window.addEventListener('resize', () => {
+    if (resizeQueued) return;
+    resizeQueued = true;
+    requestAnimationFrame(() => { sizeCanvas(); resizeQueued = false; });
+  }, { passive: true });
+  window.addEventListener('load', sizeCanvas, { once: true });
+  document.fonts?.ready.then(sizeCanvas);
+  sizeCanvas(); updateMotion();
+})();

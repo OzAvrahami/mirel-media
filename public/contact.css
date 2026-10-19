@@ -1,0 +1,19 @@
+/* Production form states, layered after the unchanged approved styles. */
+/* Contain the tilted reference marquee without adding a scroll container. */
+main { overflow-x: clip; }
+.form-trap {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.form-note { font-size: 12px; line-height: 1.5; margin-top: 12px; color: #344f7b; }
+.form-status { margin-top: 18px; padding: 14px 16px; border-left: 3px solid var(--blue); background: #f7f8ff; font-size: 16px; line-height: 1.5; overflow-wrap: anywhere; }
+.form-status:empty { display: none; }
+.form-status[data-kind=error] { color: #713247; border-color: #97506b; }
+.form-status[data-kind=success] { color: #225b46; border-color: #407b62; }
+.form-status:focus-visible { outline: 3px solid var(--navy); outline-offset: 4px; }
+.inquiry-form .button:disabled { opacity: .65; cursor: not-allowed; transform: none; }
+.inquiry-form[aria-busy=true] { cursor: progress; }
