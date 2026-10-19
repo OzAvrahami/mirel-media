@@ -1,0 +1,14 @@
+{
+  "name": "mirel-media",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "mirel-media performance marketing website and contact API",
+  "engines": { "node": ">=24.0.0" },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server.mjs",
+    "dev": "node --env-file-if-exists=.env --watch server.mjs",
+    "check": "node scripts/check.mjs",
+    "test": "node --test"
+  }
+}
