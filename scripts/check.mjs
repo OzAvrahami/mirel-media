@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 
-for (const file of ['server.mjs', 'src/contact.mjs', 'public/app.js']) execFileSync(process.execPath, ['--check', file]);
+for (const file of ['server.mjs', 'src/contact.mjs', 'scripts/gmail-authorize.mjs', 'public/app.js']) execFileSync(process.execPath, ['--check', file]);
 const html = readFileSync('public/index.html', 'utf8');
 const js = readFileSync('public/app.js', 'utf8');
 const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]);

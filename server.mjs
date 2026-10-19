@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 import { isIP } from 'node:net';
-import { ContactError, MAX_BODY_BYTES, readConfig, validateInquiry, sendInquiry, createRateLimiter } from './src/contact.mjs';
+import { ContactError, MAX_BODY_BYTES, readConfig, validateInquiry, createInquirySender, createRateLimiter } from './src/contact.mjs';
 
 const publicDir = path.resolve(fileURLToPath(new URL('./public/', import.meta.url)));
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -16,6 +16,7 @@ const HEADERS = {
 
 export function createServer({ env = process.env, fetchImpl = fetch, limiter = createRateLimiter() } = {}) {
   const config = readConfig(env);
+  const sendInquiry = createInquirySender(config, { fetchImpl });
   const globalLimiter = createRateLimiter({ limit: 60, windowMs: 600_000 });
   const json = (res, status, body, extra = {}) => {
     res.writeHead(status, { ...HEADERS, 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...extra });
@@ -49,7 +50,7 @@ export function createServer({ env = process.env, fetchImpl = fetch, limiter = c
         catch { throw new ContactError(400, 'Please check your inquiry and try again.'); }
         const data = validateInquiry(input);
         if (data.website_url) return json(res, 400, { error: 'We could not accept this submission.' });
-        await sendInquiry(data, config, { fetchImpl });
+        await sendInquiry(data);
         return json(res, 200, { ok: true });
       }
       if (url.pathname.startsWith('/api/')) return json(res, 404, { error: 'Not found.' });
@@ -86,7 +87,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const server = createServer();
   server.listen(port, '0.0.0.0', () => {
     console.log(`mirel-media is listening on port ${port}.`);
-    if (!config.configured) console.log('Email is not configured. Set RESEND_API_KEY, CONTACT_FROM and CONTACT_TO.');
+    if (!config.configured) console.log('Email is not configured. Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN, GMAIL_SENDER and CONTACT_TO. See docs/GMAIL_SETUP.md.');
   });
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => {
     server.close(() => process.exit(0));

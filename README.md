@@ -2,14 +2,14 @@
 
 English-language performance marketing, lead generation and traffic partnerships website. Version 0.1.0 is a working project foundation; production email activation and browser acceptance are pending.
 
-The approved navy, blue-grey and lilac design, original artwork, responsive layout, partner tabs and motion controls are preserved. The frontend uses plain HTML/CSS/JavaScript. A Node.js server serves the site and handles contact submissions through Resend. No runtime packages or database are required.
+The approved navy, blue-grey and lilac design, original artwork, responsive layout, partner tabs and motion controls are preserved. The frontend uses plain HTML/CSS/JavaScript. A Node.js server serves the site and handles contact submissions through Gmail API. No runtime packages or database are required.
 
 ## Run locally
 
 Requires Node.js 24 or later.
 
 ```powershell
-Copy-Item .env.example .env
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
 npm run dev
 ```
 
@@ -17,21 +17,27 @@ Open http://localhost:3000. There is no dependency installation step. Until the 
 
 ## Enable email
 
+Follow [the Google Workspace and Gmail API setup guide](docs/GMAIL_SETUP.md) first. It covers creating the mailbox, Namecheap DNS, Google Cloud, consent, a Desktop OAuth client, and a local state/PKCE authorization helper. Nothing assumes those accounts or credentials already exist.
+
 Set the following in the ignored `.env` file locally, or in the hosting service's private environment variables:
 
 | Variable | Purpose |
 | --- | --- |
-| `RESEND_API_KEY` | Sending-only Resend API key. Never put it in browser code. |
-| `CONTACT_FROM` | Verified sender, e.g. `mirel-media <forms@your-verified-domain.com>`. |
-| `CONTACT_TO` | One real recipient address, confirmed by the owner. |
+| `GOOGLE_CLIENT_ID` | OAuth Desktop client ID, configured only on the server and local helper. |
+| `GOOGLE_CLIENT_SECRET` | Matching OAuth client secret; private environment only. |
+| `GOOGLE_REFRESH_TOKEN` | Obtained with `npm run gmail:authorize`, granting only `gmail.send`. |
+| `GMAIL_SENDER` | Exactly `lior@mirel-media.com`; authorize this Workspace mailbox. |
+| `CONTACT_TO` | Exactly `lior@mirel-media.com`; fixed server recipient. |
 | `PUBLIC_ORIGIN` | Exact website origin, e.g. `https://your-domain.com`, without a path. |
 | `NODE_ENV` | `production` when hosted. |
 | `PORT` | Supplied by the host; defaults to 3000 locally. |
 | `TRUST_PROXY` | Defaults to `false`. Enable only with one trusted proxy that controls/appends `X-Forwarded-For`. |
 
-Restart after changing environment values. Resend requires a verified sending domain for normal production sending. The visitor's email is used only as `reply_to`; recipients and sender are controlled on the server. Mail is plain text. There is no automatic reply to the visitor.
+Restart after changing environment values. The visitor's validated email is used only as `Reply-To`; recipients and sender are controlled on the server. Mail is UTF-8 MIME plain text. There is no automatic reply to the visitor, mailbox-reading permission, service account, or domain-wide delegation.
 
-A successful form response means the mail provider accepted the request, not that inbox delivery was independently confirmed. Verify an actual submission reaches the intended inbox before launching. Never paste API keys into GitHub, chat, screenshots or the frontend.
+A successful form response requires a Gmail message ID. Acceptance does not independently confirm inbox delivery. Verify an actual submission reaches the intended inbox before launching. Never paste secrets or tokens into GitHub, chat, screenshots or the frontend. `/api/contact/config` exposes only whether settings are present, and performs no Google credential check.
+
+Ambiguous sends are never automatically retried. Matching submissions share an in-memory result for 24 hours, including uncertain results. This protection is limited to one running process; restarting, using another replica, changing the message/request ID, or waiting beyond retention can allow duplicates. See [operational limits](docs/LAUNCH.md#abuse-controls-and-operational-limits).
 
 ## Checks
 
@@ -40,7 +46,7 @@ npm run check
 npm test
 ```
 
-The 13 focused tests cover validation, origin checks, unconfigured behavior, honeypot, provider failures, idempotency keys, rate limiting, static file boundaries, config and proxy handling. Tests use a mock email provider and do not send mail. Browser layout/interaction QA and real delivery have not been performed in the authoring environment.
+Focused tests cover validation, origin checks, unconfigured behavior, honeypot, token refresh/expiry/revocation, Gmail errors and timeouts, Unicode MIME, duplicate suppression, rate limiting, static file boundaries, proxy handling, and the local OAuth helper. Google endpoints are mocked; tests do not load your `.env`, send mail or deploy. Browser layout/interaction QA and real delivery remain unverified.
 
 ## Create the private GitHub repository
 
@@ -68,6 +74,7 @@ The earlier ChatGPT Sites URL remains a separate static design preview with a cl
 | `public/` | English site, style sheets, client interactions and local assets |
 | `server.mjs` | Static server, HTTP routing and security headers |
 | `src/contact.mjs` | Configuration, validation, abuse controls and email transport |
+| `scripts/gmail-authorize.mjs` | Local loopback OAuth authorization with state and PKCE |
 | `test/` | HTTP integration and contact module tests |
 | `docs/` | Launch and editorial notes |
 | `.env.example` | Variable names with no credentials |
@@ -78,7 +85,7 @@ No client testimonials, campaign metrics, certifications or guarantees have been
 
 ## References
 
-- https://resend.com/docs/api-reference/emails/send-email
-- https://resend.com/docs/dashboard/domains/introduction
+- https://developers.google.com/identity/protocols/oauth2/native-app
+- https://developers.google.com/workspace/gmail/api/guides/sending
 - https://docs.railway.com/config-as-code/reference
 - https://cli.github.com/manual/gh_repo_create

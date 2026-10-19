@@ -76,7 +76,7 @@ form.addEventListener('submit', async event => {
   requestId = null; lastPayload = null;
  } catch (error) {
   const message = ['TimeoutError', 'AbortError', 'TypeError'].includes(error.name)
-   ? 'We could not confirm your submission. Check your connection and try again.'
+   ? 'We could not confirm your submission. It may have been sent. Please wait before trying again; another submission could send a duplicate.'
    : error.message;
   showFormStatus(message, 'error');
  } finally {

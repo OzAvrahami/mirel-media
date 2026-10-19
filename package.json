@@ -9,6 +9,7 @@
     "start": "node --env-file-if-exists=.env server.mjs",
     "dev": "node --env-file-if-exists=.env --watch server.mjs",
     "check": "node scripts/check.mjs",
+    "gmail:authorize": "node --env-file=.env scripts/gmail-authorize.mjs",
     "test": "node --test"
   }
 }
