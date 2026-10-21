@@ -1,5 +1,16 @@
 # Changelog
 
+## Provider switching and compact layout — Unreleased
+
+- Completed Resend as the default transport with an environment-selected Gmail alternative, selected-provider validation, configurable addressing and conservative error handling.
+- Shared the stable outgoing payload with Resend fingerprinting/idempotency; retained bounded duplicate suppression and Gmail send-only OAuth protections.
+- Made local Gmail authorization independent of provider selection and an existing refresh token.
+- Renamed project-owned ES modules, scripts and tests to `.js` and updated runtime, Docker and documentation references.
+- Reduced responsive typography, brand/sculpture sizing, artwork height and section spacing while preserving readable controls and motion behavior.
+- Added mocked provider/configuration/error coverage; no live email, deployment or private environment changes.
+
+The entries below describe earlier implementations. Provider selection and configurable addresses above supersede the former Gmail-only restrictions.
+
 ## Gmail API migration — Unreleased
 
 - Replaced the original email transport with server-only Gmail API and send-only OAuth refresh tokens.

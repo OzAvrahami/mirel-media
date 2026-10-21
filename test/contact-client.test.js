@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { validateInquiry } from '../src/contact.mjs';
+import { validateInquiry } from '../src/contact.js';
 
 const source = readFileSync(new URL('../public/contact.js', import.meta.url), 'utf8');
 const response = (body, ok = true) => ({ ok, json: async () => body });

@@ -6,10 +6,10 @@
   "description": "mirel-media performance marketing website and contact API",
   "engines": { "node": ">=24.0.0" },
   "scripts": {
-    "start": "node --env-file-if-exists=.env server.mjs",
-    "dev": "node --env-file-if-exists=.env --watch server.mjs",
-    "check": "node scripts/check.mjs",
-    "gmail:authorize": "node --env-file=.env scripts/gmail-authorize.mjs",
+    "start": "node --env-file-if-exists=.env server.js",
+    "dev": "node --env-file-if-exists=.env --watch server.js",
+    "check": "node scripts/check.js",
+    "gmail:authorize": "node --env-file=.env scripts/gmail-authorize.js",
     "test": "node --test"
   }
 }

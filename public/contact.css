@@ -17,3 +17,23 @@ main { overflow-x: clip; }
 .form-status:focus-visible { outline: 3px solid var(--navy); outline-offset: 4px; }
 .inquiry-form .button:disabled { opacity: .65; cursor: not-allowed; transform: none; }
 .inquiry-form[aria-busy=true] { cursor: progress; }
+
+/* Direct contact sits in the heading column, before the form on mobile. */
+.contact-details { margin-top: 24px; font-style: normal; font-size: 16px; line-height: 1.5; }
+.contact-details > strong { display: block; margin-bottom: 6px; font-size: 18px; font-weight: 500; }
+.contact-details a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 8px 0;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-thickness: 1px;
+}
+.contact-details a:hover { color: var(--blue); }
+.contact-details a > span { min-width: 0; overflow-wrap: anywhere; }
+.contact-details svg { width: 20px; height: 20px; flex-shrink: 0; }
+@media (max-width: 800px) { .contact-details { margin-top: 20px; } }

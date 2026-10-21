@@ -4,10 +4,10 @@ The implementation is ready for configuration and tested with mocked Google endp
 
 ## 1. Create and activate the business mailbox
 
-1. If needed, sign up for Google Workspace for `mirel-media.com`. In Google Admin, create the user `lior@mirel-media.com`, assign a license with Gmail, and enable Gmail for that user. A domain registration or forwarding alias alone is not a Workspace Gmail mailbox.
+1. If needed, sign up for Google Workspace for `your-domain.com`. In Google Admin, create the user `sender@your-domain.com`, assign a license with Gmail, and enable Gmail for that user. A domain registration or forwarding alias alone is not a Workspace Gmail mailbox.
 2. Complete Google's domain ownership verification using the TXT record shown in Admin. If Namecheap hosts the authoritative DNS, use **Domain List > Manage > Advanced DNS**. If the domain uses another provider's nameservers, edit records there instead.
 3. Follow Google's Gmail activation wizard and configure the supplied MX records. New Workspace setups use `smtp.google.com`, priority `1`, host `@`; use the actual instructions for your account. Namecheap has a **Mail Settings** section for MX configuration. Preserve website A/CNAME records and unrelated DNS. Replace conflicting mail routing only as part of the intended mailbox migration.
-4. Finish Gmail activation in Admin, then sign in to Gmail as `lior@mirel-media.com`. Before testing the website, confirm this mailbox can send and receive normal email. Complete the Admin email-authentication setup for your domain (SPF, DKIM and DMARC) using Google's current instructions.
+4. Finish Gmail activation in Admin, then sign in to Gmail as `sender@your-domain.com`. Before testing the website, confirm this mailbox can send and receive normal email. Complete the Admin email-authentication setup for your domain (SPF, DKIM and DMARC) using Google's current instructions.
 
 Sources: [Google MX setup](https://support.google.com/a/answer/9222085?hl=en-tt), [Namecheap Workspace mail setup](https://www.namecheap.com/support/knowledgebase/article.aspx/9230/177/how-to-activate-google-workspace-for-mail/).
 
@@ -23,7 +23,7 @@ Source: [Google OAuth configuration](https://developers.google.com/workspace/gui
 ## 3. Set the audience and minimum scope
 
 - Prefer **Audience > Internal** for an organization-owned project used only by your Workspace mailbox. Website visitors do not authorize Google access; only the mailbox owner does. Internal use can qualify for Google's verification exception, but Workspace administrator approval may still be required.
-- If Internal is unavailable, use **External**. While in **Testing**, add `lior@mirel-media.com` as a test user. Testing is unsuitable for unattended production: refresh tokens for this Gmail scope expire after seven days. Before ongoing use, move the app to **In production**, satisfy Google's applicable verification/policy requirements or a documented exception, then obtain a fresh refresh token. Publishing alone does not mean Google verification is complete. External unverified apps can retain warnings and user caps.
+- If Internal is unavailable, use **External**. While in **Testing**, add `sender@your-domain.com` as a test user. Testing is unsuitable for unattended production: refresh tokens for this Gmail scope expire after seven days. Before ongoing use, move the app to **In production**, satisfy Google's applicable verification/policy requirements or a documented exception, then obtain a fresh refresh token. Publishing alone does not mean Google verification is complete. External unverified apps can retain warnings and user caps.
 - Under **Data Access**, add only `https://www.googleapis.com/auth/gmail.send`. Remove other requested scopes. Do not add mailbox-reading scopes, `gmail.modify`, `gmail.compose`, full mail access, or identity/profile scopes. No service account or domain-wide delegation is needed.
 - If Workspace API controls block consent, ask the administrator to allow this OAuth client and its send-only access. Do not solve this by granting wider access.
 
@@ -47,23 +47,26 @@ if (!(Test-Path .env)) { Copy-Item .env.example .env }
 Preserve any existing `.env` settings. Add/update these values in that file; leave the refresh token blank until authorization:
 
 ```dotenv
+EMAIL_PROVIDER=gmail
 NODE_ENV=development
 PORT=3000
 PUBLIC_ORIGIN=http://localhost:3000
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 GOOGLE_REFRESH_TOKEN=
-GMAIL_SENDER=lior@mirel-media.com
-CONTACT_TO=lior@mirel-media.com
+GMAIL_SENDER=sender@your-domain.com
+CONTACT_TO=inquiries@your-domain.com
 TRUST_PROXY=false
 ```
 
-`GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` must be the values from the same Desktop client. The server intentionally refuses configuration with another sender or recipient. Remove obsolete email-provider keys from local/hosting settings once migrating; the application no longer uses them. The existing local `.env` was not modified by this task.
+`GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` must be the values from the same Desktop client. Use GMAIL_SENDER for the actual mailbox you will authorize and CONTACT_TO for the intended recipient; they may differ. Examples are placeholders. Resend settings may remain in the environment; the Gmail runtime ignores them. The existing local `.env` was not modified by this task.
+
+The helper reads GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and GMAIL_SENDER independently of EMAIL_PROVIDER. You can authorize Gmail while Resend remains selected, without CONTACT_TO or an existing refresh token. Set EMAIL_PROVIDER=gmail and restart only when ready to switch the runtime.
 
 ## 5. Authorize the intended mailbox once
 
 1. Run `npm run gmail:authorize` on your local computer, from the project directory. Do not run it as a public web service or in the hosted container. Avoid stale shell environment overrides: Node gives existing process variables precedence over `.env`.
-2. Open the printed Google authorization URL in a browser on the same computer within five minutes. Select **lior@mirel-media.com** even if another Google account is already signed in. The account hint is not proof of which account you selected.
+2. Open the printed Google authorization URL in a browser on the same computer within five minutes. Select **the account configured in GMAIL_SENDER** even if another Google account is already signed in. The account hint is not proof of which account you selected.
 3. Confirm the app requests only permission to send email. Grant consent. Google redirects to the temporary loopback listener; state is checked before the authorization code is exchanged with PKCE.
 4. On success, the helper saves `GOOGLE_REFRESH_TOKEN` directly into the ignored `.env`, preserving unrelated settings. It prints no client secret, authorization code, access token or refresh token, and sends no email. Tokens are never returned to the callback page. A denied or failed authorization leaves the prior token untouched unless saving itself fails.
 5. The helper requests no mailbox identity/read permission. It cannot independently inspect the selected account. The server sends using the configured mailbox's explicit Gmail user path; a token for a different mailbox must not be used. If you selected the wrong account, revoke that unintended grant and run the helper again as the business mailbox.
@@ -78,11 +81,12 @@ Run `npm run dev` locally after authorization. Changing `.env` requires a server
 
 | Variable | Required value |
 | --- | --- |
+| `EMAIL_PROVIDER` | `gmail` (otherwise Resend is the default) |
 | `GOOGLE_CLIENT_ID` | Same Desktop client ID used for authorization |
 | `GOOGLE_CLIENT_SECRET` | Its matching client secret |
 | `GOOGLE_REFRESH_TOKEN` | Refresh token saved by the helper; copy privately from `.env` |
-| `GMAIL_SENDER` | `lior@mirel-media.com` |
-| `CONTACT_TO` | `lior@mirel-media.com` |
+| `GMAIL_SENDER` | Actual Gmail account authorized by the helper |
+| `CONTACT_TO` | Intended recipient; can differ from GMAIL_SENDER |
 | `PUBLIC_ORIGIN` | Exact deployed HTTPS origin without a path, e.g. `https://mirel-media.com` only if that is the actual site origin |
 | `NODE_ENV` | `production` |
 | `PORT` | Use the host-provided value; local default is `3000` |

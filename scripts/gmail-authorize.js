@@ -2,13 +2,15 @@ import http from 'node:http';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 import { readFile, writeFile, lstat, chmod } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { BUSINESS_MAILBOX, GMAIL_SCOPE, TOKEN_URL } from '../src/contact.mjs';
+import { GMAIL_SCOPE, TOKEN_URL } from '../src/contact.js';
+import { readGmailAuthorizationConfig } from '../src/email-config.js';
 
 // Local operator tool only. This script is not copied into the production image.
-export async function startAuthorization({ clientId, clientSecret, saveToken,
+export async function startAuthorization({ clientId, clientSecret, sender, saveToken,
   fetchImpl = fetch, lifetimeMs = 300_000, tokenTimeoutMs = 10_000 } = {}) {
-  if (![clientId, clientSecret].every(value => typeof value === 'string' && value && !/\s/.test(value)))
-    throw new Error('Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in your private .env first.');
+  ({ clientId, clientSecret, sender } = readGmailAuthorizationConfig({
+    GOOGLE_CLIENT_ID: clientId, GOOGLE_CLIENT_SECRET: clientSecret, GMAIL_SENDER: sender
+  }));
   const state = randomBytes(32).toString('base64url');
   const verifier = randomBytes(32).toString('base64url');
   let finish;
@@ -66,7 +68,7 @@ export async function startAuthorization({ clientId, clientSecret, saveToken,
   expiry = setTimeout(() => { server.closeAllConnections(); stop(false); }, lifetimeMs);
   const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
   url.search = new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri, response_type: 'code',
-    scope: GMAIL_SCOPE, access_type: 'offline', prompt: 'consent', login_hint: BUSINESS_MAILBOX,
+    scope: GMAIL_SCOPE, access_type: 'offline', prompt: 'consent', login_hint: sender,
     state, code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256' }).toString();
   return { url: url.href, completion, close: () => { server.closeAllConnections(); stop(false); } };
 }
@@ -87,9 +89,9 @@ export async function saveRefreshToken(filename, token) {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     const filename = fileURLToPath(new URL('../.env', import.meta.url));
-    const authorization = await startAuthorization({ clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET, saveToken: token => saveRefreshToken(filename, token) });
-    console.log(`Open this URL in your local browser within five minutes. Select ${BUSINESS_MAILBOX} and approve only sending email:`);
+    const authorization = await startAuthorization({ ...readGmailAuthorizationConfig(process.env),
+      saveToken: token => saveRefreshToken(filename, token) });
+    console.log('Open this URL locally within five minutes. Select the account configured in GMAIL_SENDER and approve only sending email. The login hint does not verify account identity:');
     console.log(authorization.url);
     if (await authorization.completion) {
       console.log('GOOGLE_REFRESH_TOKEN saved to the ignored local .env. Restart the server. No email was sent.');
@@ -98,7 +100,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       process.exitCode = 1;
     }
   } catch {
-    console.error('Could not start authorization. Check the private .env client settings and docs/GMAIL_SETUP.md.');
+    console.error('Could not start authorization. Check GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and GMAIL_SENDER in the private .env and docs/GMAIL_SETUP.md.');
     process.exitCode = 1;
   }
 }

@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 import { isIP } from 'node:net';
-import { ContactError, MAX_BODY_BYTES, readConfig, validateInquiry, createInquirySender, createRateLimiter } from './src/contact.mjs';
+import { ContactError, MAX_BODY_BYTES, readConfig, validateInquiry, createInquirySender, createRateLimiter } from './src/contact.js';
 
 const publicDir = path.resolve(fileURLToPath(new URL('./public/', import.meta.url)));
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -87,7 +87,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const server = createServer();
   server.listen(port, '0.0.0.0', () => {
     console.log(`mirel-media is listening on port ${port}.`);
-    if (!config.configured) console.log('Email is not configured. Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN, GMAIL_SENDER and CONTACT_TO. See docs/GMAIL_SETUP.md.');
+    if (!config.configured) {
+      console.log(config.configurationError || (config.provider === 'gmail'
+        ? 'Gmail is not configured. Set valid GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN, GMAIL_SENDER and CONTACT_TO. See docs/GMAIL_SETUP.md.'
+        : 'Resend is not configured. Set valid RESEND_API_KEY, CONTACT_FROM and CONTACT_TO. See docs/EMAIL_SETUP.md.'));
+      console.log('The website is available; the contact form is unavailable. Restart after updating server environment variables.');
+    }
   });
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => {
     server.close(() => process.exit(0));

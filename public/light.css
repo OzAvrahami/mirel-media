@@ -52,7 +52,7 @@ textarea:focus-visible, select:focus-visible { outline-color: var(--blue); }
   background-clip: text;
   color: transparent;
 }
-.hero-copy > p, .hero-bottom p, .hero-coordinates, .stage-index {
+.hero-copy > p, .stage-index {
   color: var(--light-muted);
 }
 .hero .text-link, .expertise .text-link { border-color: #aab7ce; }

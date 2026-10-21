@@ -1,9 +1,11 @@
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 
-for (const file of ['server.mjs', 'src/contact.mjs', 'scripts/gmail-authorize.mjs', 'public/app.js', 'public/contact.js']) execFileSync(process.execPath, ['--check', file]);
+const codeFiles = ['server.js', ...['src', 'scripts', 'test', 'public'].flatMap(dir =>
+  readdirSync(dir).filter(name => name.endsWith('.js')).map(name => path.join(dir, name)))];
+for (const file of codeFiles) execFileSync(process.execPath, ['--check', file]);
 const html = readFileSync('public/index.html', 'utf8');
 const js = readFileSync('public/app.js', 'utf8') + readFileSync('public/contact.js', 'utf8');
 const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]);
@@ -15,7 +17,7 @@ for (const [, target] of html.matchAll(/(?:href="#|aria-controls="|aria-labelled
   for (const id of target.split(' ')) assert.ok(ids.includes(id), `Missing anchor/ARIA target: ${id}`);
 for (const [, id] of js.matchAll(/getElementById\(['"]([^'"]+)['"]\)/g)) assert.ok(ids.includes(id), `Missing JS target: ${id}`);
 for (const [, asset] of html.matchAll(/(?:src|href)="([^"#][^"]*)"/g))
-  if (!/^(https?:|mailto:|data:)/.test(asset)) assert.ok(existsSync(path.join('public', asset)), `Missing asset: ${asset}`);
+  if (!/^(https?:|mailto:|tel:|data:)/.test(asset)) assert.ok(existsSync(path.join('public', asset)), `Missing asset: ${asset}`);
 for (const file of ['public/styles.css', 'public/light.css', 'public/contact.css', 'public/brand.css']) {
   const css = readFileSync(file, 'utf8');
   assert.equal((css.match(/{/g) || []).length, (css.match(/}/g) || []).length, `Unbalanced CSS: ${file}`);

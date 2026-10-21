@@ -113,7 +113,7 @@
         }
       });
     }, { rootMargin: '100px 0px' });
-    document.querySelectorAll('.hero,.marquee,.creative,.perspective,.contact').forEach(element => activityObserver.observe(element));
+    document.querySelectorAll('.hero,.marquee,.creative,.contact').forEach(element => activityObserver.observe(element));
     body.classList.add('js');
   }
   document.addEventListener('focusin', event => {

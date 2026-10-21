@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { createServer } from '../server.mjs';
-import { readConfig, createRateLimiter, createInquirySender, GMAIL_SCOPE, TOKEN_URL } from '../src/contact.mjs';
+import { createServer } from '../server.js';
+import { readConfig, createRateLimiter, createInquirySender, GMAIL_SCOPE, TOKEN_URL } from '../src/contact.js';
 
-const env = { NODE_ENV: 'test', PUBLIC_ORIGIN: 'http://localhost:3000', GOOGLE_CLIENT_ID: 'test-client',
+const env = { EMAIL_PROVIDER: 'gmail', NODE_ENV: 'test', PUBLIC_ORIGIN: 'http://localhost:3000', GOOGLE_CLIENT_ID: 'test-client',
   GOOGLE_CLIENT_SECRET: 'test-secret', GOOGLE_REFRESH_TOKEN: 'test-refresh',
-  GMAIL_SENDER: 'lior@mirel-media.com', CONTACT_TO: 'lior@mirel-media.com' };
+  GMAIL_SENDER: 'sender@example.com', CONTACT_TO: 'inquiries@example.net' };
 const tokenResponse = () => Response.json({ access_token: 'test-access', expires_in: 3600, token_type: 'Bearer', scope: GMAIL_SCOPE });
 const inquiry = () => ({ name: 'Alex Taylor', email: 'alex@example.net', company: 'Example Studio',
   goal: 'We would like to discuss a lead generation campaign.', partner_role: 'Advertiser',
@@ -38,11 +38,11 @@ test('valid inquiry reaches only the configured recipient, with reply-to and pla
   const sent = JSON.parse(f.calls[1].body);
   assert.deepEqual(Object.keys(sent), ['raw']);
   const mime = Buffer.from(sent.raw, 'base64url').toString('utf8');
-  assert.match(mime, /^From: mirel-media <lior@mirel-media.com>\r\nTo: lior@mirel-media.com\r\nReply-To: alex@example.net\r\n/);
+  assert.match(mime, /^From: mirel-media <sender@example.com>\r\nTo: inquiries@example.net\r\nReply-To: alex@example.net\r\n/);
   assert.doesNotMatch(mime, /attacker|Bcc:|text\/html/);
   const body = Buffer.from(mime.split('\r\n\r\n')[1], 'base64').toString('utf8');
   assert.match(body, /Alex Taylor/); assert.match(body, /Lead generation/);
-  assert.equal(f.calls[1].url, 'https://gmail.googleapis.com/gmail/v1/users/lior%40mirel-media.com/messages/send');
+  assert.equal(f.calls[1].url, 'https://gmail.googleapis.com/gmail/v1/users/sender%40example.com/messages/send');
   assert.equal(f.calls[1].headers.Authorization, 'Bearer test-access');
   assert.equal(f.calls[1].redirect, 'error');
 });
@@ -238,7 +238,7 @@ test('static routes serve assets but never secrets or source files', async t => 
   assert.match(page.headers.get('content-security-policy'), /form-action 'self'/);
   for (const asset of ['/app.js', '/styles.css', '/brand.css', '/assets/favicon.svg', '/assets/growth-sculpture.png'])
     assert.equal((await fetch(f.base + asset)).status, 200, asset);
-  for (const forbidden of ['/.env', '/server.mjs', '/package.json', '/%2e%2e%2f.env', '/assets/%2e%2e%2f%2eenv', '/missing', '/api/missing'])
+  for (const forbidden of ['/.env', '/server.js', '/package.json', '/%2e%2e%2f.env', '/assets/%2e%2e%2f%2eenv', '/missing', '/api/missing'])
     assert.equal((await fetch(f.base + forbidden)).status, 404, forbidden);
   assert.equal((await fetch(f.base + '/healthz')).status, 200);
 });
@@ -248,7 +248,7 @@ test('config requires a secure production origin and valid mail addresses', () =
   assert.throws(() => readConfig({ ...env, PUBLIC_ORIGIN: 'https://example.com/path' }), /origin/);
   assert.equal(readConfig({ ...env, CONTACT_TO: 'bad' }).configured, false);
   assert.equal(readConfig({ ...env, GMAIL_SENDER: 'bad\r\nBcc: bad@example.com' }).configured, false);
-  assert.equal(readConfig({ ...env, GMAIL_SENDER: 'other@example.com' }).configured, false);
+  assert.equal(readConfig({ ...env, GMAIL_SENDER: 'other@example.com' }).configured, true);
   for (const key of ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REFRESH_TOKEN'])
     assert.equal(readConfig({ ...env, [key]: '' }).configured, false);
   assert.equal(readConfig({ ...env, NODE_ENV: 'production', PUBLIC_ORIGIN: 'https://example.com' }).configured, true);

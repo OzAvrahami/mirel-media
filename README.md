@@ -1,91 +1,55 @@
 # mirel-media
 
-English-language performance marketing, lead generation and traffic partnerships website. Version 0.1.0 is a working project foundation; production email activation and browser acceptance are pending.
+English-language performance marketing, lead generation and traffic partnerships website. Plain HTML/CSS/JavaScript and a Node.js 24 server; no runtime packages or database. Project JavaScript uses ES modules (`"type": "module"`).
 
-The approved navy, blue-grey and lilac design, original artwork, responsive layout, partner tabs and motion controls are preserved. The frontend uses plain HTML/CSS/JavaScript. A Node.js server serves the site and handles contact submissions through Gmail API. No runtime packages or database are required.
-
-## Run locally
-
-Requires Node.js 24 or later.
+## Local development
 
 ```powershell
+Set-Location D:\code\mirel-media
 if (!(Test-Path .env)) { Copy-Item .env.example .env }
 npm run dev
 ```
 
-Open http://localhost:3000. There is no dependency installation step. Until the mail settings are supplied, the site renders normally and the form visibly reports that it is unavailable. No inquiry is silently saved or reported as sent.
+Open http://localhost:3000. Preserve existing private `.env` values. Without valid selected-provider settings, the website and `/healthz` remain available while the form reports that it is unavailable.
 
-## Enable email
+## Email selection
 
-Follow [the Google Workspace and Gmail API setup guide](docs/GMAIL_SETUP.md) first. It covers creating the mailbox, Namecheap DNS, Google Cloud, consent, a Desktop OAuth client, and a local state/PKCE authorization helper. Nothing assumes those accounts or credentials already exist.
+`EMAIL_PROVIDER` selects `resend` (default) or `gmail`. Names are trimmed and lowercased; missing, empty or whitespace-only values select Resend. Unknown providers disable the form and produce a server-only configuration diagnostic. Only the selected provider's credentials are validated. Restart after changing settings. There is no public toggle or automatic fallback.
 
-Set the following in the ignored `.env` file locally, or in the hosting service's private environment variables:
-
-| Variable | Purpose |
+| Provider | Required server variables |
 | --- | --- |
-| `GOOGLE_CLIENT_ID` | OAuth Desktop client ID, configured only on the server and local helper. |
-| `GOOGLE_CLIENT_SECRET` | Matching OAuth client secret; private environment only. |
-| `GOOGLE_REFRESH_TOKEN` | Obtained with `npm run gmail:authorize`, granting only `gmail.send`. |
-| `GMAIL_SENDER` | Exactly `lior@mirel-media.com`; authorize this Workspace mailbox. |
-| `CONTACT_TO` | Exactly `lior@mirel-media.com`; fixed server recipient. |
-| `PUBLIC_ORIGIN` | Exact website origin, e.g. `https://your-domain.com`, without a path. |
-| `NODE_ENV` | `production` when hosted. |
-| `PORT` | Supplied by the host; defaults to 3000 locally. |
-| `TRUST_PROXY` | Defaults to `false`. Enable only with one trusted proxy that controls/appends `X-Forwarded-For`. |
+| Resend | `RESEND_API_KEY`, `CONTACT_FROM`, `CONTACT_TO` |
+| Gmail | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `GMAIL_SENDER`, `CONTACT_TO` |
 
-Restart after changing environment values. The visitor's validated email is used only as `Reply-To`; recipients and sender are controlled on the server. Mail is UTF-8 MIME plain text. There is no automatic reply to the visitor, mailbox-reading permission, service account, or domain-wide delegation.
+Follow [email setup](docs/EMAIL_SETUP.md) or [Gmail setup](docs/GMAIL_SETUP.md). Sender and recipient may be different valid addresses, configured only on the server. The validated visitor address is Reply-To. The Gmail helper reads `GMAIL_SENDER` independently of the selected provider and does not require an existing refresh token.
 
-A successful form response requires a Gmail message ID. Acceptance does not independently confirm inbox delivery. Verify an actual submission reaches the intended inbox before launching. Never paste secrets or tokens into GitHub, chat, screenshots or the frontend. `/api/contact/config` exposes only whether settings are present, and performs no Google credential check.
+`PUBLIC_ORIGIN` must match the exact site origin (HTTPS in production). Set `NODE_ENV=production` when hosted. The server honors the host's `PORT`, defaulting to 3000 locally. Keep `TRUST_PROXY=false` unless the proxy behavior in [the launch guide](docs/LAUNCH.md) is confirmed.
 
-Ambiguous sends are never automatically retried. Matching submissions share an in-memory result for 24 hours, including uncertain results. This protection is limited to one running process; restarting, using another replica, changing the message/request ID, or waiting beyond retention can allow duplicates. See [operational limits](docs/LAUNCH.md#abuse-controls-and-operational-limits).
+Success requires a valid provider message ID and means API acceptance, not confirmed inbox delivery. Uncertain sends are not automatically retried. Resend uses the submission fingerprint as its idempotency key. See [operational limits](docs/LAUNCH.md#abuse-controls-and-operational-limits).
 
-## Checks
+## Validation
 
 ```text
 npm run check
 npm test
 ```
 
-Focused tests cover validation, origin checks, unconfigured behavior, honeypot, token refresh/expiry/revocation, Gmail errors and timeouts, Unicode MIME, duplicate suppression, rate limiting, static file boundaries, proxy handling, and the local OAuth helper. Google endpoints are mocked; tests do not load your `.env`, send mail or deploy. Browser layout/interaction QA and real delivery remain unverified.
+Tests mock both providers and never load private `.env` values, send real email or deploy. They cover configuration isolation, configured addressing, HTTP protections, token refresh, Unicode, errors, timeouts, duplicate protection, the OAuth helper and production client behavior. Browser review uses a credential-free local preview. Live authorization and inbox delivery require separate manual verification.
 
-## Create the private GitHub repository
+## Hosting and structure
 
-The repository name selected for this project is `OzAvrahami/mirel-media`. GitHub repository creation was not available through the authoring connector, so the remote has **not** been created. After extracting the download into a new `mirel-media` directory, use an authenticated GitHub CLI:
-
-```text
-git init -b main
-git add .
-git commit -m "Initial mirel-media website and contact API"
-gh repo create OzAvrahami/mirel-media --private --source=. --remote=origin --push
-```
-
-Run these in the extracted project directory. Do not run them inside another project or overwrite an existing `mirel-media` directory. The download excludes Git history and credentials. A `.env` file is ignored before any commit. Use `gh auth login` first if the CLI is not connected.
-
-## Deploy
-
-The included Dockerfile and `railway.json` support deployment from the GitHub repository. See [the launch guide](docs/LAUNCH.md). No Railway project has been created or deployed by this task.
-
-The earlier ChatGPT Sites URL remains a separate static design preview with a clearly marked copy-only form. The standalone Node project in this repository is the production implementation; it must be hosted with its server to send mail. Uploading only `public/` cannot provide the contact API.
-
-## Structure
+Use the existing GitHub/Railway workflow. This local change does not deploy. Docker and npm start `server.js`; `/healthz` remains the health endpoint. Preserve Railway's working target port 8080 and environment settings. If an external start-command override still names the former entry point, update it to `node server.js` when releasing. Repository-managed commands are already updated.
 
 | Path | Purpose |
 | --- | --- |
-| `public/` | English site, style sheets, client interactions and local assets |
-| `server.mjs` | Static server, HTTP routing and security headers |
-| `src/contact.mjs` | Configuration, validation, abuse controls and email transport |
-| `scripts/gmail-authorize.mjs` | Local loopback OAuth authorization with state and PKCE |
-| `test/` | HTTP integration and contact module tests |
-| `docs/` | Launch and editorial notes |
-| `.env.example` | Variable names with no credentials |
+| `public/` | Site, responsive styles, artwork and client interactions |
+| `server.js` | Static server, contact routing and HTTP protections |
+| `src/contact.js` | Validation, Gmail transport, dispatch and duplicate protection |
+| `src/email-config.js` | Selected-provider and helper configuration |
+| `src/email-address.js` | Shared address validation |
+| `src/resend.js` | Resend request serialization and transport |
+| `scripts/gmail-authorize.js` | Local loopback OAuth with state and PKCE |
+| `scripts/check.js`, `test/` | Checks and mocked tests |
+| `docs/` | Setup and operational guidance |
 
-## Scope and assets
-
-No client testimonials, campaign metrics, certifications or guarantees have been invented. Lior Idan remains the named personal contact; confirm commercial service details with him. Self-hosted Roboto fonts retain their Apache 2.0 license in `public/assets/FONT-LICENSE.txt`. The glass growth artwork was generated for this design. No analytics or third-party browser scripts are included.
-
-## References
-
-- https://developers.google.com/identity/protocols/oauth2/native-app
-- https://developers.google.com/workspace/gmail/api/guides/sending
-- https://docs.railway.com/config-as-code/reference
-- https://cli.github.com/manual/gh_repo_create
+The website presents mirel-media, with Lior Idan listed as the direct contact. The public business email requires activation or forwarding before publication; see [the launch guide](docs/LAUNCH.md). No client results, testimonials or guarantees are invented. Self-hosted fonts retain their license in `public/assets/FONT-LICENSE.txt`. No analytics or third-party browser scripts are included.
