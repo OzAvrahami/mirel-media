@@ -14,7 +14,7 @@ const HEADERS = {
   'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
 };
 
-export function createServer({ env = process.env, fetchImpl = fetch, limiter = createRateLimiter() } = {}) {
+function createRequestHandler({ env = process.env, fetchImpl = fetch, limiter = createRateLimiter() } = {}) {
   const config = readConfig(env);
   const sendInquiry = createInquirySender(config, { fetchImpl });
   const globalLimiter = createRateLimiter({ limit: 60, windowMs: 600_000 });
@@ -22,7 +22,7 @@ export function createServer({ env = process.env, fetchImpl = fetch, limiter = c
     res.writeHead(status, { ...HEADERS, 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...extra });
     res.end(JSON.stringify(body));
   };
-  const server = http.createServer(async (req, res) => {
+  return async (req, res) => {
     try {
       const url = new URL(req.url, config.origin);
       if (url.pathname === '/healthz' && req.method === 'GET') return json(res, 200, { status: 'ok' });
@@ -39,12 +39,27 @@ export function createServer({ env = process.env, fetchImpl = fetch, limiter = c
         }
         if (!limiter(address) || !globalLimiter('site')) return json(res, 429, { error: 'Too many attempts. Please try again in ten minutes.' }, { 'Retry-After': '600' });
         if (Number(req.headers['content-length']) > MAX_BODY_BYTES) return json(res, 413, { error: 'Your message is too long. Please shorten it.' });
-        let size = 0; const chunks = [];
-        for await (const chunk of req) {
-          size += chunk.length;
-          if (size > MAX_BODY_BYTES) { json(res, 413, { error: 'Your message is too long. Please shorten it.' }); req.resume(); return; }
-          chunks.push(chunk);
-        }
+        // Vercel's helpers replay data/end events on an already-consumed request.
+        // Read those events rather than relying on the original stream's iterator.
+        const chunks = await new Promise((resolve, reject) => {
+          let size = 0; const parts = [];
+          const cleanup = () => {
+            req.off('data', onData); req.off('end', onEnd);
+            req.off('error', onError); req.off('aborted', onAborted);
+          };
+          const onError = error => { cleanup(); reject(error); };
+          const onAborted = () => onError(new ContactError(400, 'Please check your inquiry and try again.'));
+          const onEnd = () => { cleanup(); resolve(parts); };
+          const onData = chunk => {
+            size += chunk.length;
+            if (size > MAX_BODY_BYTES) {
+              onError(new ContactError(413, 'Your message is too long. Please shorten it.'));
+              req.resume();
+            } else parts.push(chunk);
+          };
+          req.on('data', onData); req.once('end', onEnd);
+          req.once('error', onError); req.once('aborted', onAborted);
+        });
         let input;
         try { input = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
         catch { throw new ContactError(400, 'Please check your inquiry and try again.'); }
@@ -73,11 +88,23 @@ export function createServer({ env = process.env, fetchImpl = fetch, limiter = c
       json(res, error instanceof ContactError ? error.status : 500,
         { error: error instanceof ContactError ? error.message : 'Something went wrong. Please try again.' });
     }
-  });
+  };
+}
+
+export function createServer(options) {
+  const server = http.createServer(createRequestHandler(options));
   server.requestTimeout = 15_000;
   server.headersTimeout = 10_000;
   server.keepAliveTimeout = 5_000;
   return server;
+}
+
+let requestHandler;
+
+// Vercel imports this module. Initialize shared state on the first request only.
+export default async function handler(req, res) {
+  requestHandler ??= createRequestHandler();
+  await requestHandler(req, res);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
