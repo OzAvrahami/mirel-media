@@ -52,7 +52,7 @@ textarea:focus-visible, select:focus-visible { outline-color: var(--blue); }
   background-clip: text;
   color: transparent;
 }
-.hero-copy > p, .stage-index {
+.hero-copy > p {
   color: var(--light-muted);
 }
 .hero .text-link, .expertise .text-link { border-color: #aab7ce; }
@@ -74,7 +74,6 @@ textarea:focus-visible, select:focus-visible { outline-color: var(--blue); }
   box-shadow: 0 8px 24px #354c8010;
 }
 .note-dot { background: var(--blue); }
-.stage-index { border-color: #bec8dc; }
 
 .marquee { background: var(--blue); color: #fff; }
 .section-light { background: #f0f3fc; }
